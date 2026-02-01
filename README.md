@@ -29,44 +29,45 @@ Under the hood it uses an unofficial local API server (`NeteaseCloudMusicApi`).
 
 ### 2) One-command install (recommended)
 
-OpenClaw loads skills from either:
+This repo includes an installer script that puts the `netease-music/` skill folder
+into a standard OpenClaw skills directory.
 
-- **Workspace skills**: `<your-openclaw-workspace>/skills/<skill-name>`
-- **Shared skills**: `~/.openclaw/skills/<skill-name>`
+#### Option A — Install into your current OpenClaw workspace (recommended)
 
-Pick one location and clone this repo’s skill folder into it.
-
-#### Option A — Install for the current workspace (per-agent)
+Run this **inside your OpenClaw workspace directory**:
 
 ```bash
-cd "<your-openclaw-workspace>"
-mkdir -p skills
-git clone https://github.com/championeer/netease-music-openclaw-skill.git /tmp/netease-music-openclaw-skill
-rm -rf skills/netease-music
-cp -R /tmp/netease-music-openclaw-skill/netease-music skills/netease-music
+git clone https://github.com/championeer/netease-music-openclaw-skill.git
+cd netease-music-openclaw-skill
+./install.sh
 ```
 
-Then start a **new OpenClaw session** so it picks up the new skill.
+This installs to: `<workspace>/skills/netease-music`
 
 #### Option B — Install globally (shared across agents on this machine)
 
 ```bash
-mkdir -p ~/.openclaw/skills
-rm -rf ~/.openclaw/skills/netease-music
-git clone https://github.com/championeer/netease-music-openclaw-skill.git /tmp/netease-music-openclaw-skill
-cp -R /tmp/netease-music-openclaw-skill/netease-music ~/.openclaw/skills/netease-music
+git clone https://github.com/championeer/netease-music-openclaw-skill.git
+cd netease-music-openclaw-skill
+./install.sh --global
 ```
 
-Then start a **new OpenClaw session**.
+This installs to: `~/.openclaw/skills/netease-music`
+
+#### One-liner (optional)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/championeer/netease-music-openclaw-skill/main/install.sh | bash -s -- --global
+```
+
+After installation, start a **new OpenClaw session** so it reloads skills.
 
 ### 2.1) “Just paste the GitHub link to OpenClaw”
 
-If you already have OpenClaw running and it can execute commands on your machine, you can simply tell it:
+If your OpenClaw can execute commands on your machine, you can simply tell it:
 
 > Install this OpenClaw skill from GitHub: https://github.com/championeer/netease-music-openclaw-skill
-> Put the `netease-music` folder into my `<workspace>/skills` (or `~/.openclaw/skills`).
-
-OpenClaw can usually handle the git clone + copy steps for you.
+> Run the repo’s `install.sh` (or copy the `netease-music` folder) into my OpenClaw skills directory.
 
 ### 3) Start the local API server
 
@@ -154,44 +155,44 @@ Use at your own risk and comply with local laws and NetEase terms.
 
 ### 2）一条命令安装（推荐）
 
-OpenClaw 会从以下目录加载 skills：
+本仓库自带 `install.sh`，用于把 `netease-music/` 安装到 OpenClaw 的标准 skills 目录。
 
-- **工作区（每个 agent 独立）**：`<你的 openclaw workspace>/skills/<skill-name>`
-- **全局共享**：`~/.openclaw/skills/<skill-name>`
+#### 方案 A：安装到当前 workspace（推荐）
 
-你只需要把本仓库里的 `netease-music/` 文件夹放进去即可。
-
-#### 方案 A：安装到当前 workspace（推荐，干净不互相影响）
+请在**你的 OpenClaw workspace 目录**里执行：
 
 ```bash
-cd "<你的 openclaw workspace>"
-mkdir -p skills
-git clone https://github.com/championeer/netease-music-openclaw-skill.git /tmp/netease-music-openclaw-skill
-rm -rf skills/netease-music
-cp -R /tmp/netease-music-openclaw-skill/netease-music skills/netease-music
+git clone https://github.com/championeer/netease-music-openclaw-skill.git
+cd netease-music-openclaw-skill
+./install.sh
 ```
 
-然后开启一个**新的 OpenClaw 会话**让它刷新技能列表。
+它会安装到：`<workspace>/skills/netease-music`
 
-#### 方案 B：安装到全局共享（同机多个 agent 都可用）
+#### 方案 B：安装到全局共享（同机多个 agent 都能用）
 
 ```bash
-mkdir -p ~/.openclaw/skills
-rm -rf ~/.openclaw/skills/netease-music
-git clone https://github.com/championeer/netease-music-openclaw-skill.git /tmp/netease-music-openclaw-skill
-cp -R /tmp/netease-music-openclaw-skill/netease-music ~/.openclaw/skills/netease-music
+git clone https://github.com/championeer/netease-music-openclaw-skill.git
+cd netease-music-openclaw-skill
+./install.sh --global
 ```
 
-同样需要开启**新的 OpenClaw 会话**。
+它会安装到：`~/.openclaw/skills/netease-music`
+
+#### 一行命令（可选）
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/championeer/netease-music-openclaw-skill/main/install.sh | bash -s -- --global
+```
+
+安装完成后，请开启一个**新的 OpenClaw 会话**以刷新技能列表。
 
 ### 2.1）“把 GitHub 链接丢给 OpenClaw 让它自己装”
 
 如果你的 OpenClaw 能在本机执行命令，你可以直接对它说：
 
 > 帮我从 GitHub 安装这个 OpenClaw skill：https://github.com/championeer/netease-music-openclaw-skill
-> 把 `netease-music` 文件夹放进我的 `<workspace>/skills`（或 `~/.openclaw/skills`）。
-
-OpenClaw 通常可以自动完成 git clone + 拷贝安装。
+> 运行仓库里的 `install.sh`（或把 `netease-music` 文件夹放到 OpenClaw 的 skills 目录）。
 
 ### 3）启动本地 API 服务
 
