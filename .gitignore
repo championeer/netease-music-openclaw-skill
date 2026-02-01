@@ -1,0 +1,14 @@
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local config/cookies
+.ncm/
+.env
+
+# OS
+.DS_Store

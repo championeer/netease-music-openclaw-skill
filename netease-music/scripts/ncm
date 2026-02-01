@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+import argparse
+import base64
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+
+def default_runtime_dir(skill_dir: str) -> str:
+    # Keep local by default (repo-private); override with NCM_RUNTIME_DIR.
+    return os.environ.get("NCM_RUNTIME_DIR", os.path.join(skill_dir, ".ncm"))
+
+
+def default_base_url() -> str:
+    return os.environ.get("NCM_API_BASE", "http://127.0.0.1:3000")
+
+
+def cookie_file(runtime_dir: str) -> str:
+    return os.environ.get("NCM_COOKIE_FILE", os.path.join(runtime_dir, "cookie.txt"))
+
+
+def http_get_json(url: str, cookie: str | None = None):
+    req = urllib.request.Request(url)
+    if cookie:
+        req.add_header("Cookie", cookie)
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = resp.read().decode("utf-8", errors="replace")
+        return json.loads(data)
+
+
+def load_cookie(path: str) -> str | None:
+    if os.path.exists(path):
+        c = open(path, "r", encoding="utf-8").read().strip()
+        return c or None
+    return None
+
+
+def save_cookie(path: str, cookie: str):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(cookie.strip() + "\n")
+
+
+def ensure_server(skill_dir: str):
+    server = os.path.join(skill_dir, "scripts", "ncm-server")
+    try:
+        subprocess.check_call([server, "start"], stdout=sys.stdout, stderr=sys.stderr)
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(e.returncode)
+
+
+def cmd_raw(args, skill_dir: str, runtime_dir: str):
+    base = args.base_url
+    cookie = load_cookie(cookie_file(runtime_dir))
+
+    path = args.path
+    if not path.startswith("/"):
+        path = "/" + path
+
+    q = {}
+    for kv in args.query or []:
+        k, v = kv.split("=", 1)
+        q[k] = v
+    if q:
+        url = base + path + "?" + urllib.parse.urlencode(q)
+    else:
+        url = base + path
+
+    print(url)
+    data = http_get_json(url, cookie=cookie)
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def cmd_search(args, skill_dir: str, runtime_dir: str):
+    base = args.base_url
+    cookie = load_cookie(cookie_file(runtime_dir))
+
+    q = {
+        "keywords": args.keywords,
+        "limit": str(args.limit),
+        "type": str(args.type),
+    }
+    url = base + "/search?" + urllib.parse.urlencode(q)
+    data = http_get_json(url, cookie=cookie)
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def cmd_playlists(args, skill_dir: str, runtime_dir: str):
+    # Requires uid; try /login/status to infer, else ask user to provide.
+    base = args.base_url
+    cookie = load_cookie(cookie_file(runtime_dir))
+    if not cookie:
+        raise SystemExit("Not logged in. Run: ncm login")
+
+    status_url = base + "/login/status?timestamp=" + str(int(time.time() * 1000))
+    status = http_get_json(status_url, cookie=cookie)
+    uid = None
+    try:
+        uid = status.get("data", {}).get("profile", {}).get("userId")
+    except Exception:
+        uid = None
+
+    if not uid:
+        raise SystemExit("Could not infer uid from /login/status. Provide uid support is TODO.")
+
+    url = base + "/user/playlist?" + urllib.parse.urlencode({"uid": str(uid)})
+    data = http_get_json(url, cookie=cookie)
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def cmd_playlist_create(args, skill_dir: str, runtime_dir: str):
+    base = args.base_url
+    cookie = load_cookie(cookie_file(runtime_dir))
+    if not cookie:
+        raise SystemExit("Not logged in. Run: ncm login")
+
+    privacy = 0 if args.privacy == "public" else 10
+    url = base + "/playlist/create?" + urllib.parse.urlencode({"name": args.name, "privacy": str(privacy)})
+    data = http_get_json(url, cookie=cookie)
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def cmd_playlist_add(args, skill_dir: str, runtime_dir: str):
+    base = args.base_url
+    cookie = load_cookie(cookie_file(runtime_dir))
+    if not cookie:
+        raise SystemExit("Not logged in. Run: ncm login")
+
+    tracks = ",".join(args.song_ids)
+    q = {"op": "add", "pid": args.playlist_id, "tracks": tracks}
+    url = base + "/playlist/tracks?" + urllib.parse.urlencode(q)
+    data = http_get_json(url, cookie=cookie)
+    print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def cmd_like(args, skill_dir: str, runtime_dir: str, like_value: bool):
+    base = args.base_url
+    cookie = load_cookie(cookie_file(runtime_dir))
+    if not cookie:
+        raise SystemExit("Not logged in. Run: ncm login")
+
+    for sid in args.song_ids:
+        q = {"id": sid, "like": "true" if like_value else "false"}
+        url = base + "/like?" + urllib.parse.urlencode(q)
+        data = http_get_json(url, cookie=cookie)
+        print(json.dumps({"songId": sid, "result": data}, ensure_ascii=False))
+
+
+def cmd_login(args, skill_dir: str, runtime_dir: str):
+    base = args.base_url
+
+    ts = str(int(time.time() * 1000))
+    key = http_get_json(base + "/login/qr/key?" + urllib.parse.urlencode({"timestamp": ts}))
+    unikey = key.get("data", {}).get("unikey")
+    if not unikey:
+        raise SystemExit("Failed to get QR key")
+
+    ts = str(int(time.time() * 1000))
+    qr = http_get_json(base + "/login/qr/create?" + urllib.parse.urlencode({"key": unikey, "qrimg": "true", "timestamp": ts}))
+    qrimg = None
+    qrurl = None
+    if isinstance(qr.get("data"), dict):
+        qrimg = qr["data"].get("qrimg")
+        qrurl = qr["data"].get("qrurl")
+
+    if qrurl:
+        print("QR URL:", qrurl)
+    if qrimg and qrimg.startswith("data:image"):
+        # Save QR png locally for the user to open.
+        header, b64 = qrimg.split(",", 1)
+        out = os.path.join(runtime_dir, "qr.png")
+        with open(out, "wb") as f:
+            f.write(base64.b64decode(b64))
+        print("Saved QR image:", out)
+    else:
+        print("No qrimg returned; you may need to open the QR URL.")
+
+    print("Polling login status...")
+    for _ in range(120):
+        ts = str(int(time.time() * 1000))
+        ck = http_get_json(base + "/login/qr/check?" + urllib.parse.urlencode({"key": unikey, "timestamp": ts}))
+        code = ck.get("code")
+        msg = ck.get("message")
+        if msg:
+            print("-", msg)
+        # Many versions return 803 on success.
+        if code in (803, 800):
+            break
+        time.sleep(1)
+
+    # After success, call /login/status which often returns a cookie via response headers in some versions.
+    # As a pragmatic approach, users can paste cookie manually if needed.
+    print("Login check finished. Attempting to read login status...")
+    status = http_get_json(base + "/login/status?timestamp=" + str(int(time.time() * 1000)))
+    print(json.dumps(status, ensure_ascii=False, indent=2))
+
+    print("\nIMPORTANT: Cookie capture varies by API version.")
+    print("If you already have a cookie string, save it to:")
+    print(cookie_file(runtime_dir))
+
+
+def main():
+    skill_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    runtime_dir = default_runtime_dir(skill_dir)
+    os.makedirs(runtime_dir, exist_ok=True)
+
+    p = argparse.ArgumentParser(prog="ncm")
+    p.add_argument("--base-url", default=default_base_url())
+
+    sp = p.add_subparsers(dest="cmd", required=True)
+
+    sp_server = sp.add_parser("server")
+    sp_server.set_defaults(_impl=lambda a: ensure_server(skill_dir))
+
+    sp_login = sp.add_parser("login")
+    sp_login.set_defaults(_impl=lambda a: cmd_login(a, skill_dir, runtime_dir))
+
+    sp_raw = sp.add_parser("raw")
+    sp_raw.add_argument("path")
+    sp_raw.add_argument("--query", action="append")
+    sp_raw.set_defaults(_impl=lambda a: cmd_raw(a, skill_dir, runtime_dir))
+
+    sp_search = sp.add_parser("search")
+    sp_search.add_argument("keywords")
+    sp_search.add_argument("--limit", type=int, default=5)
+    sp_search.add_argument("--type", type=int, default=1)
+    sp_search.set_defaults(_impl=lambda a: cmd_search(a, skill_dir, runtime_dir))
+
+    sp_playlists = sp.add_parser("playlists")
+    sp_playlists.set_defaults(_impl=lambda a: cmd_playlists(a, skill_dir, runtime_dir))
+
+    sp_pc = sp.add_parser("playlist-create")
+    sp_pc.add_argument("name")
+    sp_pc.add_argument("--privacy", choices=["public", "private"], default="private")
+    sp_pc.set_defaults(_impl=lambda a: cmd_playlist_create(a, skill_dir, runtime_dir))
+
+    sp_pa = sp.add_parser("playlist-add")
+    sp_pa.add_argument("playlist_id")
+    sp_pa.add_argument("song_ids", nargs=argparse.ONE_OR_MORE)
+    sp_pa.set_defaults(_impl=lambda a: cmd_playlist_add(a, skill_dir, runtime_dir))
+
+    sp_like = sp.add_parser("like")
+    sp_like.add_argument("song_ids", nargs=argparse.ONE_OR_MORE)
+    sp_like.set_defaults(_impl=lambda a: cmd_like(a, skill_dir, runtime_dir, True))
+
+    sp_unlike = sp.add_parser("unlike")
+    sp_unlike.add_argument("song_ids", nargs=argparse.ONE_OR_MORE)
+    sp_unlike.set_defaults(_impl=lambda a: cmd_like(a, skill_dir, runtime_dir, False))
+
+    args = p.parse_args()
+
+    # Most commands need server.
+    if args.cmd not in ("server",):
+        ensure_server(skill_dir)
+
+    args._impl(args)
+
+
+if __name__ == "__main__":
+    main()
